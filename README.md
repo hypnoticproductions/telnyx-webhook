@@ -4,10 +4,17 @@ A production-ready, Vercel-deployable Node.js application that securely receives
 
 ## Features
 
+- **Real-Time Web Dashboard**: Beautiful web UI to view incoming SMS messages instantly with auto-refresh
 - **Secure Signature Verification**: Ed25519 cryptographic signature validation to prevent webhook spoofing
 - **Timestamp Validation**: Rejects requests older than 5 minutes to prevent replay attacks
 - **Verification Code Extraction**: Automatically detects 4-6 digit codes commonly used in 2FA (Facebook, WhatsApp, etc.)
-- **Async Email Notifications**: Fire-and-forget email delivery via Resend - never blocks the webhook response
+- **One-Click Code Copy**: Click verification codes to copy them instantly to clipboard
+- **HTML Email Notifications**: Beautiful, responsive HTML emails via Resend with verification code highlighting
+- **Multiple Recipient Support**: Handles and displays all recipient phone numbers in logs and emails
+- **Message Storage**: Automatic JSONL file storage with 5MB rotation for message archival
+- **Error Notifications**: Slack webhook integration for email delivery failures
+- **Rate Limiting**: Built-in rate limiting (30 req/min per IP) to prevent webhook abuse
+- **Password Protection**: Optional basic authentication to secure the web dashboard
 - **Serverless-Ready**: Optimized for Vercel deployment with zero configuration
 - **Production Security**: No hard-coded secrets, proper error handling, minimal logging of sensitive data
 
@@ -99,12 +106,15 @@ git push origin main
 
    In the Vercel project settings, add these environment variables:
 
-   | Variable | Value |
-   |----------|-------|
-   | `TELNYX_PUBLIC_KEY` | Your base64-encoded Telnyx public key |
-   | `RESEND_API_KEY` | Your Resend API key (starts with `re_`) |
-   | `EMAIL_FROM` | Verified sender (e.g., `onboarding@resend.dev`) |
-   | `EMAIL_TO` | Your email address for notifications |
+   | Variable | Value | Required |
+   |----------|-------|----------|
+   | `TELNYX_PUBLIC_KEY` | Your base64-encoded Telnyx public key | Yes |
+   | `RESEND_API_KEY` | Your Resend API key (starts with `re_`) | Yes |
+   | `EMAIL_FROM` | Verified sender (e.g., `onboarding@resend.dev`) | Yes |
+   | `EMAIL_TO` | Your email address for notifications | Yes |
+   | `UI_PASSWORD` | Strong password for web dashboard protection | No (Recommended) |
+   | `SLACK_WEBHOOK_URL` | Slack webhook URL for error notifications | No |
+   | `MESSAGES_DIR` | Directory for message storage (default: `./messages`) | No |
 
 4. **Deploy**:
 
@@ -196,6 +206,144 @@ All phone numbers assigned to the same Messaging Profile will send their inbound
 - Filter or route based on the destination number
 - Track which number received each message
 
+## Advanced Features
+
+### Real-Time Web Dashboard
+
+The webhook includes a beautiful, responsive web dashboard accessible at the root URL (`/`) that displays:
+
+**Features:**
+- 📱 **Live Message Feed**: Auto-refreshes every 5 seconds to show new messages
+- 🔐 **Verification Code Highlighting**: Codes are displayed prominently in large, highlighted boxes
+- 📋 **One-Click Copy**: Click any verification code to copy it to clipboard instantly
+- 📊 **Statistics**: Shows total messages, verification codes detected, and last update time
+- ⏰ **Smart Timestamps**: Displays relative time (e.g., "2m ago", "Just now")
+- 📱 **Mobile Responsive**: Works perfectly on phones, tablets, and desktops
+- 🔒 **Password Protected**: Optional basic authentication (set `UI_PASSWORD` env var)
+
+**Accessing the Dashboard:**
+
+Local development:
+```
+http://localhost:3000/
+```
+
+Production (Vercel):
+```
+https://your-app.vercel.app/
+```
+
+If `UI_PASSWORD` is set, your browser will prompt for credentials:
+- **Username**: (any value, ignored)
+- **Password**: The value from your `UI_PASSWORD` environment variable
+
+**Perfect for:**
+- Setting up Facebook Business verification
+- WhatsApp Business API phone verification
+- Any 2FA code delivery that requires quick access
+- Real-time monitoring of incoming SMS
+
+### HTML Email Formatting
+
+Emails are sent with beautiful HTML formatting that includes:
+
+- **Gradient header** with clear subject line
+- **Structured field display** for From, To (with multiple recipients), and Timestamp
+- **Highlighted verification codes** with yellow background and large text
+- **Responsive design** that works on all email clients
+- **Plain text fallback** for email clients that don't support HTML
+
+Example email features:
+- Verification codes are displayed in 24px bold text with visual highlighting
+- Multiple recipients are shown in a bulleted list
+- Timestamps are formatted in locale-specific format
+- Message body preserves whitespace and line breaks
+
+### Message Storage
+
+All incoming messages are automatically stored in JSONL (JSON Lines) format:
+
+- **Location**: `./messages/` directory (configurable via `MESSAGES_DIR`)
+- **Format**: One JSON object per line for easy parsing and streaming
+- **File naming**: `messages-YYYY-MM-DD.json` (daily rotation)
+- **Auto-rotation**: Files are rotated when they exceed 5MB
+- **Gitignored**: The messages directory is automatically excluded from git
+
+Each stored message includes:
+```json
+{
+  "timestamp": "2026-01-28T12:00:00.000Z",
+  "from": "+1234567890",
+  "to": "+0987654321",
+  "toNumbers": ["+0987654321", "+1122334455"],
+  "body": "Your verification code is 123456",
+  "code": "123456",
+  "messageId": "telnyx-message-id",
+  "direction": "inbound"
+}
+```
+
+To read stored messages:
+```bash
+# View all messages from today
+cat messages/messages-$(date +%Y-%m-%d).json
+
+# Parse with jq
+cat messages/messages-*.json | jq -s '.'
+
+# Count messages
+wc -l messages/messages-*.json
+```
+
+### Error Notifications via Slack
+
+When email delivery fails, the system can automatically notify you via Slack:
+
+1. **Create a Slack Incoming Webhook**:
+   - Go to your Slack workspace settings
+   - Navigate to "Apps" → "Incoming Webhooks"
+   - Create a new webhook and copy the URL
+
+2. **Configure the webhook URL**:
+   ```env
+   SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+
+3. **Automatic notifications**:
+   - Triggered only when Resend email delivery fails
+   - Includes error message, timestamp, and message context
+   - Formatted with Slack blocks for easy reading
+   - Does not block webhook processing
+
+### Rate Limiting
+
+Built-in rate limiting protects your webhook from abuse:
+
+- **Limit**: 30 requests per minute per IP address
+- **Method**: In-memory tracking (resets on server restart)
+- **Response**: HTTP 429 (Too Many Requests) with `retryAfter` header
+- **Auto-cleanup**: Old entries are automatically removed
+
+For serverless deployments (Vercel), consider using Redis via Upstash for persistent rate limiting across function invocations:
+
+```javascript
+// Example: Upgrade to Redis-based rate limiting
+// npm install @upstash/redis
+const { Redis } = require('@upstash/redis');
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_URL,
+  token: process.env.UPSTASH_REDIS_TOKEN
+});
+```
+
+### Multiple Recipients Support
+
+The webhook handler now properly supports messages sent to multiple phone numbers:
+
+- **Logs**: Show all recipients with count (e.g., "2 recipients (+1111111111, +2222222222)")
+- **Emails**: Display all recipients in a bulleted list with "(Multiple Recipients)" label
+- **Storage**: Stores both primary recipient (`to`) and full array (`toNumbers`)
+
 ## Testing
 
 ### Local Testing
@@ -254,6 +402,9 @@ Expected log output:
 | `RESEND_API_KEY` | Yes | Resend API key (get from resend.com API keys section) |
 | `EMAIL_FROM` | Yes | Verified sender email address (e.g., `onboarding@resend.dev`) |
 | `EMAIL_TO` | Yes | Recipient email address for notifications |
+| `UI_PASSWORD` | No (Recommended) | Password to protect the web dashboard via basic auth |
+| `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for error notifications (optional) |
+| `MESSAGES_DIR` | No | Directory for message storage (default: `./messages`) |
 | `PORT` | No | Port for local development (default: 3000) |
 
 ### Getting Your Telnyx Public Key
@@ -267,14 +418,16 @@ Expected log output:
 
 ## Extension Points
 
-The code includes comments for adding additional functionality:
+The code is designed for easy extension. Here are some ideas:
 
-### Save to Database
+### Upgrade to Database Storage
+
+Replace the JSONL file storage with a database:
 
 ```javascript
 // In processIncomingMessage():
-// Save message details to database
-// await saveToDatabase({ from, to, body, timestamp, code });
+// Use Upstash Redis, Supabase, or MongoDB
+// await redis.set(`message:${messageId}`, JSON.stringify(messageData));
 ```
 
 ### Send to GitHub Issue
@@ -285,11 +438,11 @@ The code includes comments for adding additional functionality:
 // await createGitHubIssue(code, { from, body });
 ```
 
-### Forward to Slack
+### Send Message Notifications to Slack
 
 ```javascript
-// In sendEmailNotification():
-// Also send Slack notification
+// In processIncomingMessage():
+// Send all messages (not just errors) to Slack
 // await sendSlackMessage({ from, body, code });
 ```
 
@@ -298,6 +451,18 @@ The code includes comments for adding additional functionality:
 ```javascript
 // Wrap Resend call with retry logic
 // await retry(() => resend.emails.send(...), { retries: 3 });
+```
+
+### Custom Verification Code Patterns
+
+```javascript
+// In extractVerificationCode():
+// Support different code formats
+const patterns = [
+  /\b\d{4,6}\b/,           // 4-6 digits
+  /\b[A-Z]{2}\d{4}\b/,     // 2 letters + 4 digits (e.g., AB1234)
+  /\b\d{3}-\d{3}\b/        // 3-3 format (e.g., 123-456)
+];
 ```
 
 ## Security Considerations

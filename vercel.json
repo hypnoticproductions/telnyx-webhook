@@ -1,14 +1,15 @@
 {
   "version": 2,
-  "framework": null,
-  "buildCommand": null,
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "outputDirectory": null,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/server.js"
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server.js"
     }
   ],
   "headers": [
