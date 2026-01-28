@@ -1,7 +1,7 @@
 {
   "name": "telnyx-webhook",
-  "version": "2.0.0",
-  "description": "Production-ready Telnyx SMS webhook handler with Ed25519 verification, HTML emails, message storage, error notifications, and rate limiting",
+  "version": "2.1.0",
+  "description": "Production-ready Telnyx SMS webhook handler with real-time web UI, Ed25519 verification, HTML emails, message storage, error notifications, and rate limiting",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

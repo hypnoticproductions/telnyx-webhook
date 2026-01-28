@@ -4,14 +4,17 @@ A production-ready, Vercel-deployable Node.js application that securely receives
 
 ## Features
 
+- **Real-Time Web Dashboard**: Beautiful web UI to view incoming SMS messages instantly with auto-refresh
 - **Secure Signature Verification**: Ed25519 cryptographic signature validation to prevent webhook spoofing
 - **Timestamp Validation**: Rejects requests older than 5 minutes to prevent replay attacks
 - **Verification Code Extraction**: Automatically detects 4-6 digit codes commonly used in 2FA (Facebook, WhatsApp, etc.)
+- **One-Click Code Copy**: Click verification codes to copy them instantly to clipboard
 - **HTML Email Notifications**: Beautiful, responsive HTML emails via Resend with verification code highlighting
 - **Multiple Recipient Support**: Handles and displays all recipient phone numbers in logs and emails
 - **Message Storage**: Automatic JSONL file storage with 5MB rotation for message archival
 - **Error Notifications**: Slack webhook integration for email delivery failures
 - **Rate Limiting**: Built-in rate limiting (30 req/min per IP) to prevent webhook abuse
+- **Password Protection**: Optional basic authentication to secure the web dashboard
 - **Serverless-Ready**: Optimized for Vercel deployment with zero configuration
 - **Production Security**: No hard-coded secrets, proper error handling, minimal logging of sensitive data
 
@@ -109,6 +112,7 @@ git push origin main
    | `RESEND_API_KEY` | Your Resend API key (starts with `re_`) | Yes |
    | `EMAIL_FROM` | Verified sender (e.g., `onboarding@resend.dev`) | Yes |
    | `EMAIL_TO` | Your email address for notifications | Yes |
+   | `UI_PASSWORD` | Strong password for web dashboard protection | No (Recommended) |
    | `SLACK_WEBHOOK_URL` | Slack webhook URL for error notifications | No |
    | `MESSAGES_DIR` | Directory for message storage (default: `./messages`) | No |
 
@@ -203,6 +207,41 @@ All phone numbers assigned to the same Messaging Profile will send their inbound
 - Track which number received each message
 
 ## Advanced Features
+
+### Real-Time Web Dashboard
+
+The webhook includes a beautiful, responsive web dashboard accessible at the root URL (`/`) that displays:
+
+**Features:**
+- 📱 **Live Message Feed**: Auto-refreshes every 5 seconds to show new messages
+- 🔐 **Verification Code Highlighting**: Codes are displayed prominently in large, highlighted boxes
+- 📋 **One-Click Copy**: Click any verification code to copy it to clipboard instantly
+- 📊 **Statistics**: Shows total messages, verification codes detected, and last update time
+- ⏰ **Smart Timestamps**: Displays relative time (e.g., "2m ago", "Just now")
+- 📱 **Mobile Responsive**: Works perfectly on phones, tablets, and desktops
+- 🔒 **Password Protected**: Optional basic authentication (set `UI_PASSWORD` env var)
+
+**Accessing the Dashboard:**
+
+Local development:
+```
+http://localhost:3000/
+```
+
+Production (Vercel):
+```
+https://your-app.vercel.app/
+```
+
+If `UI_PASSWORD` is set, your browser will prompt for credentials:
+- **Username**: (any value, ignored)
+- **Password**: The value from your `UI_PASSWORD` environment variable
+
+**Perfect for:**
+- Setting up Facebook Business verification
+- WhatsApp Business API phone verification
+- Any 2FA code delivery that requires quick access
+- Real-time monitoring of incoming SMS
 
 ### HTML Email Formatting
 
@@ -363,6 +402,7 @@ Expected log output:
 | `RESEND_API_KEY` | Yes | Resend API key (get from resend.com API keys section) |
 | `EMAIL_FROM` | Yes | Verified sender email address (e.g., `onboarding@resend.dev`) |
 | `EMAIL_TO` | Yes | Recipient email address for notifications |
+| `UI_PASSWORD` | No (Recommended) | Password to protect the web dashboard via basic auth |
 | `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for error notifications (optional) |
 | `MESSAGES_DIR` | No | Directory for message storage (default: `./messages`) |
 | `PORT` | No | Port for local development (default: 3000) |

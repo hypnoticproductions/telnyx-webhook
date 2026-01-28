@@ -2,12 +2,13 @@
  * Telnyx SMS Webhook Handler
  *
  * Receives inbound SMS from Telnyx, verifies Ed25519 signatures,
- * extracts verification codes, sends HTML email notifications via Resend,
- * stores messages in JSONL format, supports multiple recipients, includes
- * rate limiting, and sends Slack notifications on email failures.
+ * extracts verification codes, displays them in a real-time web dashboard,
+ * sends HTML email notifications via Resend, stores messages in JSONL format,
+ * supports multiple recipients, includes rate limiting, and sends Slack
+ * notifications on email failures.
  *
  * @author MiniMax Agent
- * @version 2.0.0
+ * @version 2.1.0
  */
 
 const express = require('express');
@@ -67,6 +68,64 @@ function rateLimiter(req, res, next) {
 }
 
 // ============================================================================
+// IN-MEMORY MESSAGE STORE FOR WEB UI
+// ============================================================================
+
+// Store last 100 messages in memory for quick UI access
+const inMemoryMessages = [];
+const MAX_MESSAGES_IN_MEMORY = 100;
+
+/**
+ * Adds a message to the in-memory store
+ * Maintains a rolling buffer of the most recent messages
+ *
+ * @param {Object} message - Message to store
+ */
+function addMessageToMemory(message) {
+    inMemoryMessages.unshift(message); // Add to beginning
+
+    // Keep only the most recent messages
+    if (inMemoryMessages.length > MAX_MESSAGES_IN_MEMORY) {
+        inMemoryMessages.pop();
+    }
+}
+
+// ============================================================================
+// BASIC AUTHENTICATION MIDDLEWARE
+// ============================================================================
+
+/**
+ * Simple basic authentication for the web UI
+ * Checks for UI_PASSWORD environment variable
+ */
+function authenticateUI(req, res, next) {
+    const uiPassword = process.env.UI_PASSWORD;
+
+    // If no password is set, allow access (not recommended for production)
+    if (!uiPassword) {
+        return next();
+    }
+
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+        res.setHeader('WWW-Authenticate', 'Basic realm="SMS Dashboard"');
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
+    const [username, password] = credentials.split(':');
+
+    if (password !== uiPassword) {
+        res.setHeader('WWW-Authenticate', 'Basic realm="SMS Dashboard"');
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    next();
+}
+
+// ============================================================================
 // MIDDLEWARE CONFIGURATION
 // ============================================================================
 
@@ -81,6 +140,444 @@ app.use(bodyParser.json({
 // Health check endpoint for monitoring and load balancer probes
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
+});
+
+// ============================================================================
+// WEB UI ENDPOINTS
+// ============================================================================
+
+/**
+ * Web UI Dashboard - displays incoming SMS messages with verification codes
+ * Protected by basic authentication if UI_PASSWORD is set
+ */
+app.get('/', authenticateUI, (req, res) => {
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Dashboard | Telnyx Webhook</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .header .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 8px;
+            flex: 1;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            margin-top: 5px;
+        }
+
+        .messages-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .messages-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .messages-header h2 {
+            color: #333;
+            font-size: 20px;
+        }
+
+        .refresh-indicator {
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .refresh-indicator.loading {
+            color: #667eea;
+        }
+
+        .spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        .refresh-indicator.loading .spinner {
+            display: block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .message {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+
+        .message:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .message.has-code {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+
+        .message-from {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .message-to {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .verification-code {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .verification-code-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #d97706;
+            margin-bottom: 5px;
+        }
+
+        .verification-code-value {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            color: #92400e;
+            font-family: 'Courier New', monospace;
+            user-select: all;
+            cursor: pointer;
+        }
+
+        .verification-code-value:hover {
+            color: #78350f;
+        }
+
+        .message-body {
+            color: #333;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .empty-state-text {
+            font-size: 16px;
+        }
+
+        .copy-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .copy-notification.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header .stats {
+                flex-direction: column;
+            }
+
+            .stat-box {
+                flex: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 SMS Dashboard</h1>
+            <p class="subtitle">Real-time incoming messages from Telnyx</p>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-label">Total Messages</div>
+                    <div class="stat-value" id="total-messages">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Verification Codes</div>
+                    <div class="stat-value" id="total-codes">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Last Updated</div>
+                    <div class="stat-value" id="last-updated" style="font-size: 14px; color: #666;">Never</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="messages-container">
+            <div class="messages-header">
+                <h2>Recent Messages</h2>
+                <div class="refresh-indicator" id="refresh-indicator">
+                    <div class="spinner"></div>
+                    <span>Auto-refresh: 5s</span>
+                </div>
+            </div>
+            <div id="messages-list">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <div class="empty-state-text">No messages yet. Waiting for incoming SMS...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="copy-notification" id="copy-notification">
+        ✓ Code copied to clipboard!
+    </div>
+
+    <script>
+        let lastMessageId = null;
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return \`\${diffMins}m ago\`;
+            if (diffMins < 1440) return \`\${Math.floor(diffMins / 60)}h ago\`;
+
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+
+        // Copy code to clipboard
+        function copyCode(code, element) {
+            navigator.clipboard.writeText(code).then(() => {
+                const notification = document.getElementById('copy-notification');
+                notification.classList.add('show');
+
+                // Add visual feedback
+                element.style.transform = 'scale(1.1)';
+                setTimeout(() => {
+                    element.style.transform = 'scale(1)';
+                }, 200);
+
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Render messages
+        function renderMessages(messages) {
+            const messagesList = document.getElementById('messages-list');
+
+            if (messages.length === 0) {
+                messagesList.innerHTML = \`
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-text">No messages yet. Waiting for incoming SMS...</div>
+                    </div>
+                \`;
+                return;
+            }
+
+            const html = messages.map(msg => {
+                const hasCode = msg.code !== null;
+                const toDisplay = msg.toNumbers && msg.toNumbers.length > 1
+                    ? \`\${msg.toNumbers.length} recipients: \${msg.toNumbers.join(', ')}\`
+                    : msg.to;
+
+                return \`
+                    <div class="message \${hasCode ? 'has-code' : ''}" data-id="\${msg.messageId}">
+                        <div class="message-header">
+                            <div>
+                                <div class="message-from">From: \${msg.from}</div>
+                                <div class="message-to">To: \${toDisplay}</div>
+                            </div>
+                            <div class="message-time">\${formatTime(msg.timestamp)}</div>
+                        </div>
+                        \${hasCode ? \`
+                            <div class="verification-code">
+                                <div class="verification-code-label">🔐 Verification Code</div>
+                                <div class="verification-code-value" onclick="copyCode('\${msg.code}', this)" title="Click to copy">
+                                    \${msg.code}
+                                </div>
+                            </div>
+                        \` : ''}
+                        <div class="message-body">\${msg.body}</div>
+                    </div>
+                \`;
+            }).join('');
+
+            messagesList.innerHTML = html;
+
+            // Update stats
+            document.getElementById('total-messages').textContent = messages.length;
+            document.getElementById('total-codes').textContent = messages.filter(m => m.code).length;
+            document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Fetch messages
+        async function fetchMessages() {
+            const indicator = document.getElementById('refresh-indicator');
+            indicator.classList.add('loading');
+
+            try {
+                const response = await fetch('/api/messages');
+                if (response.ok) {
+                    const messages = await response.json();
+                    renderMessages(messages);
+                }
+            } catch (error) {
+                console.error('Failed to fetch messages:', error);
+            } finally {
+                indicator.classList.remove('loading');
+            }
+        }
+
+        // Initial load
+        fetchMessages();
+
+        // Auto-refresh every 5 seconds
+        setInterval(fetchMessages, 5000);
+    </script>
+</body>
+</html>
+    `;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+});
+
+/**
+ * API endpoint to fetch messages as JSON
+ * Protected by basic authentication if UI_PASSWORD is set
+ */
+app.get('/api/messages', authenticateUI, (req, res) => {
+    res.json(inMemoryMessages);
 });
 
 // ============================================================================
@@ -479,6 +976,9 @@ function processIncomingMessage(payload) {
         };
 
         storeMessage(messageData);
+
+        // Add to in-memory store for web UI
+        addMessageToMemory(messageData);
 
         // Trigger async email notification (fire-and-forget)
         sendEmailNotification(messageData);
