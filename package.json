@@ -1,0 +1,28 @@
+{
+  "name": "telnyx-webhook",
+  "version": "1.0.0",
+  "description": "Production-ready Telnyx SMS webhook handler with Ed25519 signature verification and Resend email notifications",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "telnyx",
+    "sms",
+    "webhook",
+    "verification",
+    "resend",
+    "serverless"
+  ],
+  "author": "MiniMax Agent",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "resend": "^3.2.0"
+  }
+}
