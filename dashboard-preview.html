@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telnyx Webhook Dashboard Preview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 40px;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn:hover, .tab-btn.active {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        /* Email Preview Styles */
+        .email-preview {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .email-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .email-header h3 {
+            color: white;
+            margin: 0;
+        }
+        
+        .email-body {
+            padding: 24px;
+        }
+        
+        .info-row {
+            display: flex;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .info-label {
+            width: 80px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        
+        .info-value {
+            color: #111827;
+            font-weight: 600;
+        }
+        
+        .phone-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .phone-badge {
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        
+        .message-box {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+        
+        .message-label {
+            color: #6b7280;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .message-text {
+            color: #1f2937;
+            white-space: pre-wrap;
+        }
+        
+        .verification-code {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .verification-code-label {
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 8px;
+        }
+        
+        .verification-code-value {
+            color: white;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 4px;
+        }
+        
+        /* Admin Panel Preview */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #6b7280;
+            margin-top: 8px;
+        }
+        
+        /* Endpoints List */
+        .endpoint-list {
+            list-style: none;
+        }
+        
+        .endpoint-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .method {
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-right: 16px;
+            font-size: 12px;
+        }
+        
+        .method.get {
+            background: #3b82f6;
+        }
+        
+        .method.post {
+            background: #10b981;
+        }
+        
+        .endpoint-url {
+            font-family: monospace;
+            color: #374151;
+        }
+        
+        /* Instructions */
+        .instructions {
+            background: #f3f4f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .instructions h3 {
+            color: #374151;
+            margin-bottom: 16px;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 12px;
+            color: #4b5563;
+        }
+        
+        .code-block {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            margin-top: 8px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Telnyx Webhook Dashboard</h1>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('email')">📧 Email Preview</button>
+            <button class="tab-btn" onclick="showTab('admin')">⚙️ Admin Panel</button>
+            <button class="tab-btn" onclick="showTab('endpoints')">🔗 Endpoints</button>
+            <button class="tab-btn" onclick="showTab('setup')">🚀 Setup</button>
+        </div>
+        
+        <!-- Email Preview Tab -->
+        <div id="email" class="tab-content active">
+            <div class="card">
+                <h2>📧 HTML Email Preview</h2>
+                <p style="color: #6b7280; margin-bottom: 20px;">This is what your email notifications will look like when you receive an SMS with a verification code.</p>
+                
+                <div class="email-preview">
+                    <div class="email-header">
+                        <h3>📱 New SMS Received</h3>
+                    </div>
+                    
+                    <div class="email-body">
+                        <div class="info-row">
+                            <span class="info-label">From:</span>
+                            <span class="info-value">+1 (234) 567-8900</span>
+                        </div>
+                        
+                        <div class="info-row">
+                            <span class="info-label">To:</span>
+                            <div class="phone-badges">
+                                <span class="phone-badge">+1 (555) 123-4567</span>
+                                <span class="phone-badge">+1 (555) 987-6543</span>
+                            </div>
+                        </div>
+                        
+                        <div class="info-row">
+                            <span class="info-label">Time:</span>
+                            <span style="color: #6b7280;">2026-01-28 21:25:00 UTC</span>
+                        </div>
+                        
+                        <div class="message-box">
+                            <div class="message-label">Message</div>
+                            <div class="message-text">Your Facebook verification code is: 582941
+
+This code will expire in 10 minutes.
+
+If you did not request this code, please ignore this message.</div>
+                        </div>
+                        
+                        <div class="verification-code">
+                            <div class="verification-code-label">Verification Code Detected</div>
+                            <div class="verification-code-value">582941</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>📱 Multi-Recipient Example</h2>
+                <p style="color: #6b7280; margin-bottom: 20px;">When SMS is sent to multiple recipients, all numbers are displayed.</p>
+                
+                <div class="email-preview">
+                    <div class="email-header">
+                        <h3>📱 New SMS Received</h3>
+                    </div>
+                    
+                    <div class="email-body">
+                        <div class="info-row">
+                            <span class="info-label">From:</span>
+                            <span class="info-value">WhatsApp (+1 987-654-3210)</span>
+                        </div>
+                        
+                        <div class="info-row">
+                            <span class="info-label">To:</span>
+                            <div class="phone-badges">
+                                <span class="phone-badge">+1 (555) 111-2222</span>
+                                <span class="phone-badge">+1 (555) 333-4444</span>
+                                <span class="phone-badge">+1 (555) 555-6666</span>
+                                <span class="phone-badge">+1 (555) 777-8888</span>
+                            </div>
+                        </div>
+                        
+                        <div class="message-box">
+                            <div class="message-label">Message</div>
+                            <div class="message-text">Your verification code is: 123456</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Admin Panel Tab -->
+        <div id="admin" class="tab-content">
+            <div class="card">
+                <h2>⚙️ Admin Dashboard Preview</h2>
+                <p style="color: #6b7280; margin-bottom: 20px;">The admin panel shows real-time statistics about your webhook.</p>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">2.0.0</div>
+                        <div class="stat-label">Version</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-value">99.9%</div>
+                        <div class="stat-label">Uptime</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-value">47</div>
+                        <div class="stat-label">Messages Stored</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-value">12</div>
+                        <div class="stat-label">Active Clients</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-bottom: 16px;">Rate Limiting Status</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">30</div>
+                        <div class="stat-label">Max Requests/Min</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-value">60s</div>
+                        <div class="stat-label">Window Size</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-value">Enabled</div>
+                        <div class="stat-label">Protection</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin: 30px 0 16px;">Recent Messages</h3>
+                <div style="background: #f9fafb; border-radius: 8px; padding: 20px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #e5e7eb;">
+                                <th style="text-align: left; padding: 12px; color: #6b7280;">From</th>
+                                <th style="text-align: left; padding: 12px; color: #6b7280;">To</th>
+                                <th style="text-align: left; padding: 12px; color: #6b7280;">Message</th>
+                                <th style="text-align: left; padding: 12px; color: #6b7280;">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 12px;">+1 (234) 567-8900</td>
+                                <td style="padding: 12px;">+1 (555) 123-4567</td>
+                                <td style="padding: 12px;">Your code is 582941</td>
+                                <td style="padding: 12px;">21:25</td>
+                            </tr>
+                            <tr style="border-bottom: 1px solid #e5e7eb;">
+                                <td style="padding: 12px;">WhatsApp</td>
+                                <td style="padding: 12px;">+1 (555) 111-2222</td>
+                                <td style="padding: 12px;">Facebook: 123456</td>
+                                <td style="padding: 12px;">20:45</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 12px;">+1 (987) 654-3210</td>
+                                <td style="padding: 12px;">+1 (555) 333-4444</td>
+                                <td style="padding: 12px;">Your verification code is...</td>
+                                <td style="padding: 12px;">19:30</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Endpoints Tab -->
+        <div id="endpoints" class="tab-content">
+            <div class="card">
+                <h2>🔗 API Endpoints</h2>
+                <p style="color: #6b7280; margin-bottom: 20px;">Available endpoints for your deployed webhook (replace your-domain.vercel.app with your actual domain).</p>
+                
+                <ul class="endpoint-list">
+                    <li class="endpoint-item">
+                        <span class="method post">POST</span>
+                        <span class="endpoint-url">https://your-domain.vercel.app/webhook</span>
+                    </li>
+                    
+                    <li class="endpoint-item">
+                        <span class="method get">GET</span>
+                        <span class="endpoint-url">https://your-domain.vercel.app/health</span>
+                    </li>
+                    
+                    <li class="endpoint-item">
+                        <span class="method get">GET</span>
+                        <span class="endpoint-url">https://your-domain.vercel.app/admin/health</span>
+                    </li>
+                    
+                    <li class="endpoint-item">
+                        <span class="method get">GET</span>
+                        <span class="endpoint-url">https://your-domain.vercel.app/admin/messages?limit=10</span>
+                    </li>
+                </ul>
+                
+                <div class="instructions">
+                    <h3>Example Responses</h3>
+                    
+                    <h4 style="margin: 16px 0 8px;">GET /health</h4>
+                    <div class="code-block">
+{
+  "status": "ok",
+  "version": "2.0.0",
+  "timestamp": "2026-01-28T21:25:00Z"
+}</div>
+                    
+                    <h4 style="margin: 16px 0 8px;">GET /admin/health</h4>
+                    <div class="code-block">
+{
+  "status": "ok",
+  "version": "2.0.0",
+  "uptime": 3600,
+  "rateLimit": {
+    "activeClients": 12,
+    "config": { "windowMs": 60000, "maxRequests": 30 }
+  },
+  "storage": { "type": "json", "file": "messages.jsonl" }
+}</div>
+                    
+                    <h4 style="margin: 16px 0 8px;">GET /admin/messages?limit=10</h4>
+                    <div class="code-block">
+{
+  "success": true,
+  "messages": [
+    {
+      "id": "1701234567890-abc123",
+      "from": "+1234567890",
+      "to": ["+0987654321"],
+      "body": "Your code is 582941",
+      "timestamp": "2026-01-28T21:25:00Z",
+      "code": "582941",
+      "processedAt": "2026-01-28T21:25:00.123Z"
+    }
+  ]
+}</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Setup Tab -->
+        <div id="setup" class="tab-content">
+            <div class="card">
+                <h2>🚀 Quick Setup Guide</h2>
+                
+                <div class="instructions">
+                    <h3>1. Deploy to Vercel</h3>
+                    <ol>
+                        <li>Your code is already on GitHub: <strong>hypnoticproductions/telnyx-webhook</strong></li>
+                        <li>Go to <a href="https://vercel.com/dashboard" target="_blank">vercel.com/dashboard</a></li>
+                        <li>Import the repository</li>
+                        <li>Add environment variables:</li>
+                    </ol>
+                    <div class="code-block">
+TELNYX_PUBLIC_KEY=G/aki61Xy5ZJBt4D3cE8Sa750ahug3tE14PYY/sePSo=
+RESEND_API_KEY=re_U9wH8VaJ_13SeUZKeKZXCe3GX5p3AmjQs
+EMAIL_FROM=onboarding@resend.dev
+EMAIL_TO=richardf.productions@gmail.com
+                    </div>
+                    
+                    <h3 style="margin-top: 20px;">2. Configure Telnyx</h3>
+                    <ol>
+                        <li>Go to <a href="https://portal.telnyx.com" target="_blank">portal.telnyx.com</a></li>
+                        <li>Navigate to Messaging → Messaging Profiles</li>
+                        <li>Set Inbound Webhook URL to: <code>https://your-vercel-app.vercel.app/webhook</code></li>
+                    </ol>
+                    
+                    <h3 style="margin-top: 20px;">3. Test It!</h3>
+                    <ol>
+                        <li>Send an SMS to your Telnyx number with a code like "582941"</li>
+                        <li>Check your email for the HTML notification</li>
+                        <li>Visit <code>https://your-domain.vercel.app/admin/messages</code> to see stored messages</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
